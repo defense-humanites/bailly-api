@@ -1,3 +1,4 @@
+import { reencode } from "@humanities/greek-conversion";
 import { Database } from "../Database.ts";
 import type {
   ApiEntryParams,
@@ -8,6 +9,19 @@ import type {
   QueryableFields
 } from "../definitions.ts";
 import { Settings } from "../Settings.ts";
+
+/**
+ * Normalize a malformed URI (e.g. "hódos" or "hēmera" for "hodos" and "hêmera").
+ * @param q A query string.
+ */
+function normalizeUri(q: string): string {
+  return reencode(q, "transliteration", {
+    removeDiacritics: true,
+    orthography: {
+      longVowels: "circumflex"
+    }
+  });
+}
 
 export async function getEntry<K extends keyof QueryableFields>({
   q,
@@ -21,26 +35,26 @@ export async function getEntry<K extends keyof QueryableFields>({
   // Remove from the query any trailing substring starting with a hash.
   q = q.replace(/#\d?$/, "");
 
-  // The entry can be either a single word or a set of words
-  // ending with a hash and a number.
-  // @fixme: don't get 'word' colmun twice if it's in `fields`.
+  // The entry can be either a single word or 2+ words ending with a hash and a number.
   const entriesSql = `
-    SELECT orderedID, ${
-      !fieldsStr.includes("word") ? `word, ${fieldsStr}` : fieldsStr
-    }
+    SELECT orderedID, ${!fieldsStr.includes("word") ? `word, ${fieldsStr}` : fieldsStr}
     FROM bailly
     WHERE uri = $q
     OR uri GLOB $qHashNumber
   `;
 
-  const entriesSqlParams = {
-    $q: q,
-    $qHashNumber: `${q}#?`
-  };
+  const entriesStmt = db.prepare(entriesSql);
+  const fetchEntries = (q: string) =>
+    <PartialExcept<DatabaseEntry, "orderedID" | "word">[]> (
+      entriesStmt.all({ $q: q, $qHashNumber: `${q}#?` })
+    );
 
-  const data = <PartialExcept<DatabaseEntry, "orderedID" | "word">[]>(
-    db.prepare(entriesSql).all(entriesSqlParams)
-  );
+  // Try the URI as is first, then its normalized form if it matches nothing.
+  let data = fetchEntries(q);
+  if (!data.length) {
+    const normalizedQ = normalizeUri(q);
+    if (normalizedQ !== q) data = fetchEntries(normalizedQ);
+  }
 
   if (!data.length) {
     return {
@@ -105,7 +119,7 @@ export async function getEntry<K extends keyof QueryableFields>({
     $nextID: nextSiblingID
   };
 
-  const siblings = <PartialExcept<DatabaseEntry, "orderedID">[]>(
+  const siblings = <PartialExcept<DatabaseEntry, "orderedID">[]> (
     db.prepare(siblingsSql).all(siblingsParams)
   );
 

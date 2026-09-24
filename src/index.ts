@@ -1,24 +1,37 @@
-import { AdditionalChar, KeyType, toTransliteration } from "greek-conversion";
 import { Hono } from "@hono/hono";
 import { cors } from "@hono/hono/cors";
-import { logger } from "@hono/hono/logger";
+import { HTTPException } from "@hono/hono/http-exception";
 import { secureHeaders } from "@hono/hono/secure-headers";
 import { Database } from "./Database.ts";
 import { setParams } from "./helpers.ts";
 import { getEntry } from "./model/entry.ts";
-import { getEntries } from "./model/lookup.ts";
+import { getEntries, preloadLookupStatements } from "./model/lookup.ts";
 import { getRandomEntry } from "./model/randomEntry.ts";
 import { Morpheus } from "./Morpheus.ts";
+import { logger } from "./logger.ts";
 import { Settings } from "./Settings.ts";
-
-if (Deno.env.get("NODE_ENV") === "development") {
-  console.warn("⚠️ The development mode is active.");
-}
+import type {
+  ApiEntryParams,
+  ApiLookupParams,
+  ApiRandomEntryParams,
+  QueryableFields
+} from "./definitions.ts";
 
 const settings = Settings.getSettings();
 
 await Database.getConnection();
 await Morpheus.getMorpheus();
+
+{
+  const start = performance.now();
+  const count = await preloadLookupStatements();
+  console.info(
+    `%c${count ? "✅" : "🟠"} Prepared ${count} lookup statements in ${
+      (performance.now() - start).toFixed(1)
+    } ms.`,
+    count ? "font-weight:bold;color:green" : "font-weight:bold;color:orange"
+  );
+}
 
 export const app = new Hono();
 
@@ -31,49 +44,121 @@ app.get("/", (c) => {
 });
 
 app.get("/entry/random", async (c) => {
-  const { fields, lengthRange } = c.req.query();
-  const params = setParams({ fields, lengthRange });
+  // `setParams()` always sets `q`, which is irrelevant here.
+  const params = setParams<
+    ApiRandomEntryParams<keyof QueryableFields> & { q?: string }
+  >({
+    ...c.req.query()
+  });
+
+  delete params.q;
+
   const entry = await getRandomEntry(params);
-  return c.json(entry);
+
+  return c.json({
+    data: {
+      $query: params,
+      ...entry.data
+    }
+  });
 });
 
 app.get("/entry/:uri", async (c) => {
-  const { fields, siblings } = c.req.query();
-  const params = setParams({ q: c.req.param("uri"), fields, siblings });
+  const q = c.req.param("uri");
+  const params = setParams<ApiEntryParams<keyof QueryableFields>>({
+    ...c.req.query(),
+    q
+  });
+  const entry = await getEntry(params);
 
-  // Handle malformed URIs smoothly.
-  // @fixme: using option `removeDiacritics` removes dashes and
-  //         this prevents access to contract verbs for example.
-  params.q = toTransliteration(params.q, KeyType.TRANSLITERATION, {
-    additionalChars: AdditionalChar.DIGAMMA,
-    //removeDiacritics: true,
-    transliterationStyle: {
-      gammaNasal_n: true,
-      useCxOverMacron: true
+  return c.json({
+    data: {
+      $query: params,
+      ...entry.data
     }
   });
+});
 
-  const entry = await getEntry(params);
-  return c.json(entry);
+// For batch requests.
+app.post("/entry", async (c) => {
+  const params = setParams<ApiEntryParams<keyof QueryableFields>>(await c.req.json());
+  const queries: string[] = params.q.split(",");
+
+  if (queries.length > 1) {
+    if (settings.isDevEnv) {
+      console.info(
+        `%c🚀 Batching ${queries.length.toLocaleString()} queries...`,
+        "font-weight:bold;color:mediumPurple"
+      );
+      console.info(queries);
+    }
+
+    if (queries.length > settings.queryMaxBatchSize) {
+      throw new HTTPException(400, { message: "Maximum batch size exceeded" });
+    }
+  }
+
+  const responses = await Promise.all(
+    queries.map((query) => getEntry({ ...params, q: query }))
+  );
+
+  return c.json({
+    $query: params,
+    count: responses.length,
+    queries: responses
+  });
 });
 
 app.get("/lookup/:q", async (c) => {
   const q = c.req.param("q");
-  const { inputMode, fields, morphology, caseSensitive, limit, skipMorpheus } =
-    c.req.query();
-  const params = setParams({
-    q,
-    inputMode,
-    fields,
-    morphology,
-    caseSensitive,
-    limit,
-    skipMorpheus
+  const params = setParams<ApiLookupParams<keyof QueryableFields>>({
+    ...c.req.query(),
+    q
   });
   const entries = await getEntries(params);
-  return c.json(entries);
+
+  return c.json({
+    data: {
+      $query: params,
+      ...entries.data
+    }
+  });
+});
+
+// For batch requests.
+app.post("/lookup", async (c) => {
+  const params = setParams<ApiLookupParams<keyof QueryableFields>>(await c.req.json());
+  const queries: string[] = params.q.split(",");
+
+  if (queries.length > 1) {
+    if (settings.isDevEnv) {
+      console.info(
+        `%c🚀 Batching ${queries.length.toLocaleString()} queries...`,
+        "font-weight:bold;color:mediumPurple"
+      );
+      //console.info(queries);
+    }
+
+    if (queries.length > settings.queryMaxBatchSize) {
+      throw new HTTPException(400, { message: "Maximum batch size exceeded" });
+    }
+  }
+
+  const responses = await Promise.all(
+    queries.map((query) => getEntries({ ...params, q: query }))
+  );
+
+  return c.json({
+    $query: params ?? {},
+    count: responses.length,
+    queries: responses
+  });
 });
 
 Deno.serve({ port: settings.port }, app.fetch);
 
-console.info("🐎 The API is running.");
+console.info(
+  `%c🐎 The API is running...${settings.isDevEnv ? " %c(🚧 development mode)" : ""}`,
+  "font-weight:bold;color:cyan",
+  ...(settings.isDevEnv ? ["font-weight:bold;color:yellow"] : [])
+);

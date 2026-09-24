@@ -5,7 +5,15 @@
 
 node_modules/
 
+.git/
+.gitignore
+.dockerignore
+
 .env*
+
+Procfile
+
+**/*.md
 
 # The database is decompressed at startup. Ignore any databases that have
 # already been extracted.
@@ -13,6 +21,5 @@ database/*.db
 
 # libmorpheus, installed by `heroku_build.ts` (Heroku build).
 vendor/
-
-# The database is not distributed with the code (cf. README).
-database/*.gz
+heroku_build.ts
+scripts/heroku_release.ts

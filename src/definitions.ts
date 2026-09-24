@@ -1,31 +1,23 @@
-import type { KeyType } from "greek-conversion";
+import type { Format as GreekConversionFormat } from "@humanities/greek-conversion";
+import type { MorpheusResponse, Morphology } from "./Morpheus.ts";
 
 export type NonEmptyArray<T> = [T, ...T[]];
 
 export type Optional<T, K extends keyof T> = { [P in K]?: T[K] };
 
-export type PartialExcept<T, K extends keyof T> = Pick<T, K> &
-  Partial<Omit<T, K>>;
+export type PartialExcept<T, K extends keyof T> =
+  & Pick<T, K>
+  & Partial<Omit<T, K>>;
 
-export type ApiRawParams = {
-  q?: string;
-  inputMode?: "greek" | "betacode" | "transliteration" | string;
-  fields?: string;
-  morphology?: string;
-  caseSensitive?: string;
-  lengthRange?: string;
-  limit?: string;
-  offset?: string;
-  siblings?: string;
-  skipMorpheus?: string;
-};
+export type GreekConversionFormatKey = GreekConversionFormat;
 
 export type ApiParams<K extends keyof QueryableFields> = {
   q: string;
-  inputMode: KeyType;
+  inputMode: GreekConversionFormatKey;
   fields: NonEmptyArray<keyof Pick<QueryableFields, K>>;
   morphology: boolean;
   caseSensitive: boolean;
+  diacriticSensitive: boolean;
   lengthRange: [number, number?] | null;
   limit?: number;
   offset?: number;
@@ -44,6 +36,7 @@ export type ApiLookupParams<K extends keyof QueryableFields> = Pick<
   | "fields"
   | "morphology"
   | "caseSensitive"
+  | "diacriticSensitive"
   | "limit"
   | "skipMorpheus"
 >;
@@ -58,8 +51,9 @@ export type ApiResponse = {
   };
 };
 
-export interface ApiEntryResponse<K extends keyof QueryableFields>
-  extends ApiResponse {
+export interface ApiEntryResponse<
+  K extends keyof QueryableFields
+> extends ApiResponse {
   data: {
     version: string;
     entry: PartialExcept<Entry<K>, K | "children">;
@@ -67,8 +61,9 @@ export interface ApiEntryResponse<K extends keyof QueryableFields>
   };
 }
 
-export interface ApiRandomEntryResponse<K extends keyof QueryableFields>
-  extends ApiResponse {
+export interface ApiRandomEntryResponse<
+  K extends keyof QueryableFields
+> extends ApiResponse {
   data: {
     version: string;
     length: number;
@@ -76,22 +71,22 @@ export interface ApiRandomEntryResponse<K extends keyof QueryableFields>
   };
 }
 
-export interface ApiLookupResponse<K extends keyof QueryableFields>
-  extends ApiResponse {
+export interface ApiLookupResponse<
+  K extends keyof QueryableFields
+> extends ApiResponse {
   data: {
     version: string;
     count: number;
     countAll: number;
-    morphology?: MorpheusData;
+    orphanMorphology?: MorpheusResponse<Morphology>;
     entries: PartialExcept<
       Entry<K>,
-      K | "children" | "isExact" | "isMorpheus"
+      K | "children" | "isExact" | "isMorpheus" | "morphology"
     >[];
   };
 }
 
 export type DatabaseEntry = {
-  countAll: number;
   orderedID: number;
   word: string;
   uri: string;
@@ -115,6 +110,7 @@ export type Entry<K extends keyof Entry = never> = {
   excerpt: string;
   isExact: boolean;
   isMorpheus: boolean;
+  morphology?: MorpheusResponse<Morphology>;
   children?: PartialExcept<Entry, K>[];
 };
 
@@ -131,18 +127,4 @@ export type Siblings<K extends keyof QueryableFields> = {
 export type EntryWithSiblings<K extends keyof QueryableFields> = {
   entry: PartialExcept<Entry<K>, K>;
   siblings: Siblings<K>;
-};
-
-export type MorpheusData = {
-  [lemma: string]: MorpheusDataItem[];
-};
-
-export type MorpheusDataItem = {
-  workw: string;
-  lem: string;
-  prvb: string;
-  aug1: string;
-  stem: string;
-  suff: string;
-  end: string;
 };
