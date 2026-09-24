@@ -36,7 +36,7 @@ _Creative Commons Attribution - Pas d'Utilisation Commerciale - Pas de Modificat
 ### Analyse morphologique
 
 Cette application utilise [libmorpheus](https://github.com/defense-humanites/libmorpheus),
-qui modernise et étend les capacités de l'analyseur morphologique Morpheus,
-initialement développé dans le cadre de la Perseus Digital Library (Gregory Crane
-_et al._ pour le compte de l'université Tufts). `libmorpheus` est distribué sous licence
+qui modernise et étend les capacités de l'analyseur morphologique Morpheus, lequel a
+initialement été développé dans le cadre de la Perseus Digital Library (Gregory Crane
+_et al._ pour le compte de l'université Tufts). `libmorpheus` est distribuée sous licence
 mixte, MPL-2.0 et AGPL-3.0-or-later.
