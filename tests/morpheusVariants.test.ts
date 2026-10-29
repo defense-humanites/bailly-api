@@ -2,6 +2,8 @@ import { assertEquals } from "@std/assert";
 import {
   buildBreathingVariants,
   capitalize,
+  getCrasis,
+  hasInitialRoughBreathing,
   removeAccents
 } from "../src/Morpheus.ts";
 
@@ -68,4 +70,31 @@ Deno.test("capitalize: diacritics stay on the capital", () => {
   // `toUpperCase()` alone would give ὯΙ.
   assertEquals(capitalize("ᾧ"), "ᾯ");
   assertEquals(capitalize("Λογος"), "Λογος");
+});
+
+Deno.test("hasInitialRoughBreathing: initial vowel or diphthong", () => {
+  assertEquals(hasInitialRoughBreathing("ἁνα"), true);
+  assertEquals(hasInitialRoughBreathing("Ἁνα"), true);
+  assertEquals(hasInitialRoughBreathing("οὑμος"), true);
+  assertEquals(hasInitialRoughBreathing("ἅνα"), true);
+  assertEquals(hasInitialRoughBreathing("ἀνα"), false);
+  assertEquals(hasInitialRoughBreathing("ανα"), false);
+  assertEquals(hasInitialRoughBreathing("ἀνὴρ ἁ"), false);
+});
+
+Deno.test("getCrasis: the two words of a crasis reading, in Greek", () => {
+  assertEquals(getCrasis({ crasis: "w)=", workword: "a)gaqe/" }), {
+    first: "ὦ",
+    second: "ἀγαθέ"
+  });
+  assertEquals(getCrasis({ crasis: "kai/", workword: "e)gw/" }), {
+    first: "καί",
+    second: "ἐγώ"
+  });
+  // Quantity marks are removed.
+  assertEquals(getCrasis({ crasis: "ta/", workword: "a)/lla_" }), {
+    first: "τά",
+    second: "ἄλλα"
+  });
+  assertEquals(getCrasis({ crasis: "", workword: "a)na/" }), undefined);
 });
